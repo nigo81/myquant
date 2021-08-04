@@ -234,7 +234,7 @@ def get_trade_date(start_date=None,end_date=None):
         df = ak.tool_trade_date_hist_sina()
         df.columns = ['trade_date']
         df.to_csv(path,index=False)
-    # df['trade_date'] = df['trade_date'].apply(lambda x: x.strftime('%Y-%m-%d'))
+        df['trade_date'] = df['trade_date'].apply(lambda x: x.strftime('%Y-%m-%d'))
     df = df[(df.trade_date<=end_date) & (df.trade_date>=start_date)]
     return df['trade_date'].to_list()
 
@@ -261,7 +261,7 @@ def update_stock_data(stocks,is_all=False):
                     if end_date<=data_date:
                         continue
                     else:
-                        start_date = datetime.datetime.strptime(data_date) + datetime.timedelta(days=1)
+                        start_date = datetime.datetime.strptime(data_date,'%Y-%m-%d') + datetime.timedelta(days=1)
                         start_date = start_date.strftime('%Y-%m-%d')
                         df_single = get_k_date(full_code(stock,is_index=False,is_dot=True),start_date,today)
                         if not df_single.empty:
@@ -272,6 +272,7 @@ def update_stock_data(stocks,is_all=False):
                         df_single.to_csv(path,index=False)
         else:
             df_single = get_k_date(full_code(stock,is_index=False,is_dot=True),'1990-01-01',today)
+            print('首次%s  %s')
             if not df_single.empty:
                 df_single.to_csv(path,index=False)
     bs.logout()
@@ -791,10 +792,17 @@ def plot_stock(code,start_date='1995-01-01'):
     pb_mid = df['PB'].quantile(0.5)
     plot_pe_pb(df,title,pe_high=pe_high,pe_low=pe_low,pe_mid=pe_mid,pb_high=pb_high,pb_low=pb_low,pb_mid=pb_mid)
 
+def check_dir():
+    path_list = [PATH_INDEX,PATH_INFO,PATH_STOCK,PATH_MARKET,PATH_WEIGHT]
+    for path in path_list:
+        if not os.path.exists(path):
+            os.mkdir(path)
+
 def main():
     if len(sys.argv)<2:
         print('需要至少1个参数\r\nmarket：全市场估计\r\nindex:指数估值\r\nstock:个股估值')
     else:
+        check_dir()
         if sys.argv[1] == 'market':
             if len(sys.argv)<3:
                 all_market_value()
@@ -830,6 +838,7 @@ def main():
             print('参数错误')
 
 if __name__ == "__main__":
-    # main()
-    index_customer_value()
+    main()
+    # index_customer_value()
     # all_market_value()
+    # check_dir()
