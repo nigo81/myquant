@@ -238,7 +238,19 @@ def get_trade_date(start_date=None,end_date=None):
     df = df[(df.trade_date<=end_date) & (df.trade_date>=start_date)]
     return df['trade_date'].to_list()
 
-def update_stock_data(stocks,is_all=False):
+def get_hk_stock(code):
+    """获取香港PE\PB"""
+    df_pb = ak.stock_hk_eniu_indicator(symbol=code, indicator="市净率")
+    df_pb = df_pb.loc[:,['date','pb']]
+    df_pe = ak.stock_hk_eniu_indicator(symbol=code, indicator="市盈率")
+    df_pe = df_pe.loc[:,['date','pe']]
+    df = pd.merge(df_pe,df_pb,on='date')
+    df['psTTM'] = ''
+    df.columns = ['date','peTTM','pbMRQ','psTTM']
+    path = os.path.join(PATH_STOCK,'%s_indicator.csv' % code)
+    df.to_csv(path,index=False)
+
+def update_stock_data(stocks,is_all=False,use_flag=False):
     """更新所有股票数据"""
     bs.login()
     today = datetime.date.today()
@@ -252,7 +264,10 @@ def update_stock_data(stocks,is_all=False):
         pbar.set_description("更新股票%s数据" % stock)
         # print('更新股票%s数据' % stock)
         path = os.path.join(PATH_STOCK,'%s_indicator.csv' % stock)
-        flag = judge_update_stock(is_all)
+        if use_flag:
+            flag = judge_update_stock(is_all)
+        else:
+            flag = True
         if os.path.exists(path):
             if flag:
                 try:
@@ -261,19 +276,28 @@ def update_stock_data(stocks,is_all=False):
                     if end_date<=data_date:
                         continue
                     else:
-                        start_date = datetime.datetime.strptime(data_date,'%Y-%m-%d') + datetime.timedelta(days=1)
-                        start_date = start_date.strftime('%Y-%m-%d')
-                        df_single = get_k_date(full_code(stock,is_index=False,is_dot=True),start_date,today)
-                        if not df_single.empty:
-                            df_single.to_csv(path,index=False,header=False,mode='a')
+                        if stock[:2] == 'hk':
+                            get_hk_stock(stock)
+                        else:
+                            start_date = datetime.datetime.strptime(data_date,'%Y-%m-%d') + datetime.timedelta(days=1)
+                            start_date = start_date.strftime('%Y-%m-%d')
+                            df_single = get_k_date(full_code(stock,is_index=False,is_dot=True),start_date,today)
+                            if not df_single.empty:
+                                df_single.to_csv(path,index=False,header=False,mode='a')
                 except:
-                    df_single = get_k_date(full_code(stock,is_index=False,is_dot=True),'1990-01-01',today)
-                    if not df_single.empty:
-                        df_single.to_csv(path,index=False)
+                    if stock[:2]  == 'hk':
+                        get_hk_stock(stock)
+                    else:
+                        df_single = get_k_date(full_code(stock,is_index=False,is_dot=True),'1990-01-01',today)
+                        if not df_single.empty:
+                            df_single.to_csv(path,index=False)
         else:
-            df_single = get_k_date(full_code(stock,is_index=False,is_dot=True),'1990-01-01',today)
-            if not df_single.empty:
-                df_single.to_csv(path,index=False)
+            if stock[:2] == 'hk':
+                get_hk_stock(stock)
+            else:
+                df_single = get_k_date(full_code(stock,is_index=False,is_dot=True),'1990-01-01',today)
+                if not df_single.empty:
+                    df_single.to_csv(path,index=False)
     bs.logout()
 
 def calc_avg(numbers):
@@ -397,6 +421,43 @@ def calc_all_market_pe_pb(start_date,end_date):
             result.append([date,pe,pb,ps])
     df = pd.DataFrame(result,columns=['trade_date','PE','PB','PS'])
     return df
+
+def all_market_pe_pb_legu():
+    """乐咕全市场"""
+    path_pe = './all_market/all_market_pe_legu.csv'
+    path_pb = './all_market/all_market_pb_legu.csv'
+    flag = judge_update_stock(is_all=True)
+    if os.path.exists(path_pe):
+        if flag:
+            df_pe = ak.stock_a_ttm_lyr()
+            df_pe.to_csv(path_pe,index=False)
+        else:
+            df_pe = read_csv(path_pe)
+    else:
+        df_pe = ak.stock_a_ttm_lyr()
+        df_pe.to_csv(path_pe,index=False)
+    if os.path.exists(path_pb):
+        if flag:
+            df_pb = ak.stock_a_all_pb()
+            df_pb.to_csv(path_pb,index=False)
+        else:
+            df_pb = read_csv(path_pb)
+    else:
+        df_pb = ak.stock_a_all_pb()
+        df_pb.to_csv(path_pb,index=False)
+    pe_ratio = df_pe.iloc[-1].quantileInAllHistoryMiddlePeTtm * 100 # 历史百分位
+    pb_ratio = df_pb.iloc[-1].quantileInAllHistoryMiddlePB * 100 # 历史百分位
+    df_pe = df_pe.loc[:,['date','middlePETTM']]
+    df_pb = df_pb.loc[:,['date','middlePB']]
+    df_pe.columns = ['trade_date','PE']
+    df_pb.columns = ['trade_date','PB']
+    df = pd.merge(df_pe,df_pb,on='trade_date')
+    date = df.iloc[-1].trade_date
+    # (pe_ratio,pb_ratio) = calc_ratio(df,'PE','PB')
+    title='%s全市场中位数PE、PB     当前PE百分位：%.2f,当前PB百分位：%.2f' % (date,pe_ratio,pb_ratio)
+    plot(df,title)
+    write_update_date(is_all=True)
+    
 
 def all_market_value(years=None):
     """全市场pe,pb"""
@@ -667,7 +728,7 @@ def write_update_date(is_all=False):
 def index_customer_value():
     """将自选的指数生成pe\pb\ps估值列表"""
     stock_list = get_all_index_stocks(INDEX_LIST)
-    update_stock_data(stock_list)
+    update_stock_data(stock_list,use_flag=True)
     get_hs_data(INDEX_LIST)
     pe,pb,ps = pe_pb_analysis(INDEX_LIST)
     # 写入更新时间
@@ -692,8 +753,19 @@ def get_all_k_data():
     """更新A股所有股票数据"""
     df = stock_info(is_all=True)
     stocks = df['code'].to_list()
-    update_stock_data(stocks,is_all=True)
+    update_stock_data(stocks,is_all=True,use_flag=True)
 
+def request_hk(url,path):
+    """获取恒生指数与恒生国企指数PE"""
+    response = requests.get(url)
+    df = pd.DataFrame(response.json())
+    df = df.fillna('')
+    if not df.empty:
+        df.columns = ['trade_date','PE','close']
+        df.to_csv(path,index=False)
+    else:
+        df = None
+    return df
 
 def get_hk_pe_pb(code):
     """获取恒生指数与恒生国企指数PE"""
@@ -705,12 +777,16 @@ def get_hk_pe_pb(code):
         path = os.path.join(PATH_INDEX,'hscei_pe_pb.csv')
     else:
         return None
-    response = requests.get(url)
-    df = pd.DataFrame(response.json())
-    df = df.fillna('')
-    if not df.empty:
-        df.to_csv(path,index=False)
-    df.columns = ['trade_date','PE','close']
+    if os.path.exists(path):
+        df = read_csv(path)
+        data_date = df.iloc[-1].trade_date
+        yestoday = datetime.date.today() - datetime.timedelta(days=1)
+        if data_date>=str(yestoday):
+            pass
+        else:
+            df = request_hk(url,path)
+    else:
+        df = request_hk(url,path)
     return df
 
 def plot_pe_pb(df,title,**kw):
@@ -755,6 +831,16 @@ def plot_all_market(start_date='1995-01-01'):
     df = df[df.trade_date >= start_date]
     plot_pe_pb(df,'全市场估值')
 
+def plot(df,title):
+    """绘制基础图形"""
+    pe_high = df['PE'].quantile(0.9)
+    pe_low = df['PE'].quantile(0.1)
+    pe_mid = df['PE'].quantile(0.5)
+    pb_high = df['PB'].quantile(0.9)
+    pb_low = df['PB'].quantile(0.1)
+    pb_mid = df['PB'].quantile(0.5)
+    plot_pe_pb(df,title,pe_high=pe_high,pe_low=pe_low,pe_mid=pe_mid,pb_high=pb_high,pb_low=pb_low,pb_mid=pb_mid)
+
 
 def plot_index(code,start_date='2000-01-01'):
     """绘制指数估计趋势图"""
@@ -763,14 +849,10 @@ def plot_index(code,start_date='2000-01-01'):
     df = df[df.trade_date >= start_date]
     info = get_security_info(code)
     name = info.iloc[0].display_name
-    title = '%s %s估值' % (name,code)
-    pe_high = df['PE'].quantile(0.9)
-    pe_low = df['PE'].quantile(0.1)
-    pe_mid = df['PE'].quantile(0.5)
-    pb_high = df['PB'].quantile(0.9)
-    pb_low = df['PB'].quantile(0.1)
-    pb_mid = df['PB'].quantile(0.5)
-    plot_pe_pb(df,title,pe_high=pe_high,pe_low=pe_low,pe_mid=pe_mid,pb_high=pb_high,pb_low=pb_low,pb_mid=pb_mid)
+    (pe_ratio, pb_ratio) = calc_ratio(df,'PE','PB')
+    last_date = df.iloc[-1].trade_date
+    title = '%s %s估值   %s当前PE百分位:%.2f,当前PB百分位:%.2f' % (name,code,last_date,pe_ratio,pb_ratio)
+    plot(df,title)
 
 def plot_stock(code,start_date='1995-01-01'):
     """绘制个股的估值图"""
@@ -778,18 +860,17 @@ def plot_stock(code,start_date='1995-01-01'):
     df = pd.read_csv(path)
     df = df.loc[:,['date','peTTM','pbMRQ','psTTM']]
     df.columns = ['trade_date','PE','PB','PS']
-    info = stock_info()
-    info = info[info.code==code]
-    name = info.iloc[0]['name']
-    title = '%s %s估值' % (name,code)
+    if code[:2] =='hk':
+        name = ''
+    else:
+        info = stock_info()
+        info = info[info.code==code]
+        name = info.iloc[0]['name']
     df = df[df.trade_date >= start_date]
-    pe_high = df['PE'].quantile(0.9)
-    pe_low = df['PE'].quantile(0.1)
-    pe_mid = df['PE'].quantile(0.5)
-    pb_high = df['PB'].quantile(0.9)
-    pb_low = df['PB'].quantile(0.1)
-    pb_mid = df['PB'].quantile(0.5)
-    plot_pe_pb(df,title,pe_high=pe_high,pe_low=pe_low,pe_mid=pe_mid,pb_high=pb_high,pb_low=pb_low,pb_mid=pb_mid)
+    (pe_ratio, pb_ratio) = calc_ratio(df,'PE','PB')
+    last_date = df.iloc[-1].trade_date
+    title = '%s %s估值   %s当前PE百分位:%.2f,当前PB百分位:%.2f' % (name,code,last_date,pe_ratio,pb_ratio)
+    plot(df,title)
 
 def check_dir():
     path_list = [PATH_INDEX,PATH_INFO,PATH_STOCK,PATH_MARKET,PATH_WEIGHT]
@@ -804,12 +885,14 @@ def main():
         check_dir()
         if sys.argv[1] == 'market':
             if len(sys.argv)<3:
-                all_market_value()
-                plot_all_market()
-                print("输入python calc.py market 2015-01-01\r\n将从指定日期开始计算\r\n否则默认图形从1995-01-01开始绘制")
+                all_market_pe_pb_legu()
+                # all_market_value()
+                # plot_all_market()
+                # print("输入python calc.py market 2015-01-01\r\n将从指定日期开始计算\r\n否则默认图形从1995-01-01开始绘制")
             else:
-                all_market_value()
-                plot_all_market(sys.argv[2])
+                all_market_pe_pb_legu()
+                # all_market_value()
+                # plot_all_market(sys.argv[2])
         elif sys.argv[1] == 'index':
             if len(sys.argv)<3:
                 index_customer_value()
@@ -838,6 +921,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # get_hk_stock('hk09988')
+    # update_stock_data('hk09988')
+    # all_market_pe_pb_legu()
     # index_customer_value()
     # all_market_value()
     # check_dir()
