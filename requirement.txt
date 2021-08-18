@@ -1,0 +1,8 @@
+pandas
+akshare
+baostock
+tqdm
+plotly
+tabulate 
+wcwidth
+requests

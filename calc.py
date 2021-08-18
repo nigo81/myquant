@@ -272,7 +272,6 @@ def update_stock_data(stocks,is_all=False):
                         df_single.to_csv(path,index=False)
         else:
             df_single = get_k_date(full_code(stock,is_index=False,is_dot=True),'1990-01-01',today)
-            print('首次%s  %s')
             if not df_single.empty:
                 df_single.to_csv(path,index=False)
     bs.logout()
