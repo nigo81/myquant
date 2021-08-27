@@ -453,8 +453,10 @@ def all_market_pe_pb_legu():
     df_pb.columns = ['trade_date','PB']
     df = pd.merge(df_pe,df_pb,on='trade_date')
     date = df.iloc[-1].trade_date
+    pe = df.iloc[-1].PE
+    pb = df.iloc[-1].PB
     # (pe_ratio,pb_ratio) = calc_ratio(df,'PE','PB')
-    title='%s全市场中位数PE、PB     当前PE百分位：%.2f,当前PB百分位：%.2f' % (date,pe_ratio,pb_ratio)
+    title='%s全市场中位数PE、PB  当前PE:%.2f，当前PB:%.2f   当前PE百分位：%.2f,当前PB百分位：%.2f' % (date,pe,pb,pe_ratio,pb_ratio)
     plot(df,title)
     write_update_date(is_all=True)
     
@@ -851,7 +853,9 @@ def plot_index(code,start_date='2000-01-01'):
     name = info.iloc[0].display_name
     (pe_ratio, pb_ratio) = calc_ratio(df,'PE','PB')
     last_date = df.iloc[-1].trade_date
-    title = '%s %s估值   %s当前PE百分位:%.2f,当前PB百分位:%.2f' % (name,code,last_date,pe_ratio,pb_ratio)
+    pe = df.iloc[-1].PE
+    pb = df.iloc[-1].PB
+    title = '%s %s %s估值 当前PE:%.2f，当前PB:%.2f  当前PE百分位:%.2f,当前PB百分位:%.2f' % (name,code,last_date,pe,pb,pe_ratio,pb_ratio)
     plot(df,title)
 
 def plot_stock(code,start_date='1995-01-01'):
@@ -869,7 +873,9 @@ def plot_stock(code,start_date='1995-01-01'):
     df = df[df.trade_date >= start_date]
     (pe_ratio, pb_ratio) = calc_ratio(df,'PE','PB')
     last_date = df.iloc[-1].trade_date
-    title = '%s %s估值   %s当前PE百分位:%.2f,当前PB百分位:%.2f' % (name,code,last_date,pe_ratio,pb_ratio)
+    pe = df.iloc[-1].PE
+    pb = df.iloc[-1].PB
+    title = '%s %s %s估值 当前PE:%.2f，当前PB:%.2f  当前PE百分位:%.2f,当前PB百分位:%.2f' % (name,code,last_date,pe,pb,pe_ratio,pb_ratio)
     plot(df,title)
 
 def check_dir():
