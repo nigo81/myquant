@@ -112,12 +112,24 @@ def judge_update_stock(is_all=False):
     else:
         return False
 
-def judge_update_weight(date):
+def get_file_date(file):
+    """获取文件修改日期"""
+    filemt = time.localtime(os.stat(file).st_mtime)
+    file_time = time.strftime('%Y-%m-%d',filemt)
+    return file_time
+
+def judge_update_weight(code,date):
     """判断给定日期是否需要进行更新
     date:给定日期
     """
-    update_date = config_update_date()
-    if update_date:
+    file_new = code + '-new.csv'
+    path_new = os.path.join(PATH_WEIGHT,file_new)
+    file_history = code + '-history.csv'
+    path_history = os.path.join(PATH_WEIGHT,file_history)
+    if os.path.exists(path_new) and os.path.exists(path_history):
+        new_date = get_file_date(path_new)
+        history_date = get_file_date(path_history)
+        update_date = min(new_date,history_date)
         given_date = datetime.datetime.strptime(date,'%Y-%m-%d')
         update_date = datetime.datetime.strptime(update_date,'%Y-%m-%d')
         diff_month = (given_date.year - update_date.year) * 12 + given_date.month - update_date.month # 月份差
@@ -174,7 +186,7 @@ def get_index_weight(code,date=None):
     path_new = os.path.join(PATH_WEIGHT,file_new)
     file_history = code + '-history.csv'
     path_history = os.path.join(PATH_WEIGHT,file_history)
-    flag = judge_update_weight(date)
+    flag = judge_update_weight(code,date)
     # 判断是不是更新过了，应对接口频率限制
     if os.path.exists(PATH_TMP):
         tmp = read_csv(PATH_TMP,code=str)
